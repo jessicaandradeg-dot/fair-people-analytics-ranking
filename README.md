@@ -103,11 +103,3 @@ The command writes local files under `reports/`, including the experiment summar
 For `--n 1000 --seed 42`, the test set has 300 synthetic records and top-k contains 60. The original ranking models had NDCG@60 values of approximately `0.873` and `0.923`. In the generated synthetic drift stress test, `education_access` and `experience_years` are deliberately shifted and reported as high-PSI. In the randomized offline pilot simulation, precision was `0.867` for the control and `0.767` for the treatment; the treatment-minus-control difference was `-0.10`, with a bootstrap 95% interval from `-0.30` to `0.10`. This illustrates why measuring a trade-off and uncertainty is preferable to claiming mitigation automatically improved quality. Exact results can be regenerated with the command above.
 
 These numbers describe only this deterministic simulation. They are not real-world evidence or claims about any group.
-
-## Next steps before any real-data research
-
-- Review [GOVERNANCE.md](./GOVERNANCE.md) with qualified privacy, legal, HR, accessibility, security, and research stakeholders.
-- Define a job-related target and evaluation protocol with explicit human review and appeal; do not use historical labels uncritically.
-- Add uncertainty/intersectional analyses and review suitable fairness definitions with affected stakeholders.
-- Treat drift alerts as investigation signals; define ownership, escalation, rollback, and documentation before any deployment.
-- Only consider a controlled online pilot if separately authorized, ethically reviewed, and supported by a valid privacy/security and organizational approval process.
