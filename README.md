@@ -72,10 +72,3 @@ The training split fits the historical-decision model on all four non-protected 
 
 With `python -m people_analytics --n 1000 --seed 42`, the held-out set contains 300 synthetic records and the audit uses `k=60`. The historical-decision model and job-signal reference produced NDCG@60 values of approximately `0.887` and `0.889` in that run. The example demonstrates that similar aggregate ranking quality does not establish fair treatment: group selection and recall rates differ, and the nonbinary test group is small and flagged. These are simulated outputs, not real-world evidence or claims about any group.
 
-## Next research steps
-
-- Add bootstrap confidence intervals and minimum group-size warnings.
-- Evaluate intersectional groups and more than one defensible fairness definition.
-- Test sensitivity to proxy strength, label noise, selection rate, and group composition.
-- Document an explicit human-review and appeal process before considering any real-world research.
-- Review legal, privacy, accessibility, and ethics requirements with qualified reviewers before working with real data.
