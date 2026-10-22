@@ -3,6 +3,15 @@
 import numpy as np
 import pandas as pd
 
+MODEL_FEATURES = [
+    "skills_score",
+    "work_sample_score",
+    "education_access",
+    "experience_years",
+]
+JOB_SIGNAL_FEATURES = ["skills_score", "work_sample_score"]
+AUDIT_ATTRIBUTES = ["gender_group", "race_group_synthetic", "age_group"]
+
 
 def make_synthetic_candidates(
     n: int = 3000,
@@ -24,6 +33,11 @@ def make_synthetic_candidates(
         size=n,
         p=[0.47, 0.47, 0.06],
     )
+    race_group_synthetic = rng.choice(
+        ["synthetic_group_a", "synthetic_group_b", "synthetic_group_c"],
+        size=n,
+        p=[0.60, 0.25, 0.15],
+    )
     age = rng.integers(22, 61, size=n)
     age_group = np.where(age < 40, "under_40", "40_and_over")
 
@@ -36,6 +50,8 @@ def make_synthetic_candidates(
 
     women = gender_group == "women"
     nonbinary = gender_group == "nonbinary"
+    group_b = race_group_synthetic == "synthetic_group_b"
+    group_c = race_group_synthetic == "synthetic_group_c"
     older = age_group == "40_and_over"
     education_access = np.clip(
         rng.normal(
@@ -68,10 +84,17 @@ def make_synthetic_candidates(
         + 0.025 * experience_years
         - 0.30 * women
         - 0.25 * nonbinary
+        - 0.20 * group_b
+        - 0.10 * group_c
         - 0.20 * older
     )
     historical_probability = 1.0 / (1.0 + np.exp(-historical_log_odds))
     historical_selection = rng.binomial(1, historical_probability)
+    review_minutes = np.clip(
+        rng.normal(7.0 + 3.0 * (1.0 - work_sample_score), 1.5, size=n),
+        3.0,
+        15.0,
+    )
 
     return pd.DataFrame(
         {
@@ -80,9 +103,69 @@ def make_synthetic_candidates(
             "work_sample_score": work_sample_score,
             "education_access": education_access,
             "experience_years": experience_years,
+            "review_minutes": review_minutes,
             "gender_group": gender_group,
+            "race_group_synthetic": race_group_synthetic,
             "age_group": age_group,
             "qualified": qualified,
             "historical_selection": historical_selection,
         }
     )
+
+
+def prepare_and_integrate_synthetic_sources(
+    records: pd.DataFrame,
+) -> pd.DataFrame:
+    """Validate and join two synthetic tables using a one-to-one candidate key."""
+    required = {
+        "candidate_id",
+        "skills_score",
+        "education_access",
+        "experience_years",
+        "review_minutes",
+        "gender_group",
+        "race_group_synthetic",
+        "age_group",
+        "work_sample_score",
+        "qualified",
+        "historical_selection",
+    }
+    missing = required - set(records.columns)
+    if missing:
+        raise ValueError(f"Synthetic source data is missing columns: {sorted(missing)}")
+    if records.empty:
+        raise ValueError("Synthetic source data must not be empty.")
+    if records["candidate_id"].isna().any() or records["candidate_id"].duplicated().any():
+        raise ValueError("candidate_id must be present and unique in each source.")
+
+    profile_columns = [
+        "candidate_id",
+        "skills_score",
+        "education_access",
+        "experience_years",
+        "review_minutes",
+        "gender_group",
+        "race_group_synthetic",
+        "age_group",
+    ]
+    assessment_columns = [
+        "candidate_id",
+        "work_sample_score",
+        "qualified",
+        "historical_selection",
+    ]
+    profile_source = records[profile_columns].copy()
+    assessment_source = records[assessment_columns].copy()
+    integrated = profile_source.merge(
+        assessment_source,
+        on="candidate_id",
+        how="outer",
+        validate="one_to_one",
+        indicator=True,
+    )
+    unmatched = integrated["_merge"] != "both"
+    if unmatched.any():
+        raise ValueError(
+            f"Sources contain {int(unmatched.sum())} unmatched candidate records."
+        )
+    return integrated.drop(columns="_merge")

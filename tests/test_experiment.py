@@ -20,6 +20,7 @@ def test_experiment_is_reproducible_and_audits_groups():
     }
     assert set(first.group_audits["historical_decision_model"]["attribute"]) == {
         "gender_group",
+        "race_group_synthetic",
         "age_group",
     }
 

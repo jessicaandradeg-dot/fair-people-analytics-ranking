@@ -8,26 +8,31 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .data import make_synthetic_candidates
+from .data import (
+    AUDIT_ATTRIBUTES,
+    JOB_SIGNAL_FEATURES,
+    MODEL_FEATURES,
+    make_synthetic_candidates,
+    prepare_and_integrate_synthetic_sources,
+)
+from .explainability import coefficient_explanations, local_linear_explanations
 from .metrics import audit_by_group, ranking_metrics
-
-MODEL_FEATURES = [
-    "skills_score",
-    "work_sample_score",
-    "education_access",
-    "experience_years",
-]
-JOB_SIGNAL_FEATURES = ["skills_score", "work_sample_score"]
-AUDIT_ATTRIBUTES = ["gender_group", "age_group"]
+from .mitigation import demographic_parity_selection, selected_set_metrics
 
 
 @dataclass(frozen=True)
 class ExperimentResult:
-    """Test records, model scores, summary metrics and group audits."""
+    """Training/test records, model scores, and concise audit outputs."""
 
+    training_records: pd.DataFrame
     ranked_test_records: pd.DataFrame
     summary: dict[str, dict[str, float | int | None]]
     group_audits: dict[str, pd.DataFrame]
+    mitigation_selection: pd.Series
+    mitigation_metrics: dict[str, float | int]
+    mitigation_audit: pd.DataFrame
+    coefficient_explanations: pd.DataFrame
+    local_explanations: pd.DataFrame
     k: int
 
 
@@ -44,7 +49,9 @@ def run_experiment(
     if not 0.0 < selection_fraction <= 1.0:
         raise ValueError("selection_fraction must be greater than 0 and at most 1.")
 
-    records = make_synthetic_candidates(n=n, random_state=random_state)
+    records = prepare_and_integrate_synthetic_sources(
+        make_synthetic_candidates(n=n, random_state=random_state)
+    )
     train, test = train_test_split(
         records,
         test_size=0.30,
@@ -65,15 +72,7 @@ def run_experiment(
     )
     signal_model.fit(train[JOB_SIGNAL_FEATURES], train["qualified"])
 
-    ranked = test[
-        [
-            "candidate_id",
-            "gender_group",
-            "age_group",
-            "qualified",
-            "historical_selection",
-        ]
-    ].copy()
+    ranked = test.copy()
     ranked["historical_decision_score"] = historical_model.predict_proba(
         test[MODEL_FEATURES]
     )[:, 1]
@@ -99,9 +98,75 @@ def run_experiment(
             ignore_index=True,
         )
 
+    mitigation = demographic_parity_selection(
+        ranked,
+        ranked["historical_decision_score"].to_numpy(),
+        k,
+        "gender_group",
+    )
+    mitigation_selection = pd.Series(
+        mitigation,
+        index=ranked.index,
+        name="demographic_parity_selected",
+    )
+    mitigation_metrics = selected_set_metrics(ranked, mitigation)
+    mitigation_audit = pd.concat(
+        [
+            audit_by_group(
+                ranked,
+                mitigation.astype(float),
+                k,
+                attribute,
+            ).assign(attribute=attribute)
+            for attribute in AUDIT_ATTRIBUTES
+        ],
+        ignore_index=True,
+    )
+
+    coefficient_explanation_frames = []
+    local_explanation_frames = []
+    for model_name, model, model_features, score_column in (
+        (
+            "historical_decision_model",
+            historical_model,
+            MODEL_FEATURES,
+            "historical_decision_score",
+        ),
+        (
+            "job_signal_reference",
+            signal_model,
+            JOB_SIGNAL_FEATURES,
+            "job_signal_score",
+        ),
+    ):
+        coefficient_explanation_frames.append(
+            coefficient_explanations(model, model_features).assign(model=model_name)
+        )
+        selected_for_explanation = ranked.nlargest(10, score_column)
+        local_explanation_frames.append(
+            local_linear_explanations(
+                model,
+                selected_for_explanation,
+                model_features,
+            )
+            .assign(
+                model=model_name,
+                candidate_id=selected_for_explanation["candidate_id"].to_numpy(),
+            )
+        )
+
     return ExperimentResult(
+        training_records=train.reset_index(drop=True),
         ranked_test_records=ranked,
         summary=summary,
         group_audits=group_audits,
+        mitigation_selection=mitigation_selection,
+        mitigation_metrics=mitigation_metrics,
+        mitigation_audit=mitigation_audit,
+        coefficient_explanations=pd.concat(
+            coefficient_explanation_frames,
+            ignore_index=True,
+        ),
+        local_explanations=pd.concat(local_explanation_frames, ignore_index=True),
         k=k,
     )
