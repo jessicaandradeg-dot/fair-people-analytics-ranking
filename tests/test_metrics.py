@@ -38,6 +38,9 @@ def test_audit_reports_selection_and_qualified_recall_by_group():
     assert group_b["qualified_recall_at_k"] == 1.0
     assert group_a["small_group_warning"]
     assert group_b["small_group_warning"]
+    assert group_a["selection_ratio_vs_highest"] == 1.0
+    assert group_a["meets_four_fifths_rule"]
+    assert group_b["meets_four_fifths_rule"]
 
 
 def test_audit_rejects_invalid_minimum_group_size():

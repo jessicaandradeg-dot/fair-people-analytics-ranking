@@ -17,7 +17,17 @@ def test_experiment_is_reproducible_and_audits_groups():
     assert set(first.group_audits) == {
         "historical_decision_model",
         "job_signal_reference",
+        "lightgbm_lambdarank",
     }
+    assert first.summary["lightgbm_lambdarank"]["vacancies"] > 0
+    assert set(first.shap_explanations["feature"]) == {
+        "skills_score",
+        "work_sample_score",
+    }
+    assert first.shap_explanations["shap_value"].notna().all()
+    assert set(first.training_records["job_id"]).isdisjoint(
+        set(first.ranked_test_records["job_id"])
+    )
     assert set(first.group_audits["historical_decision_model"]["attribute"]) == {
         "gender_group",
         "race_group_synthetic",

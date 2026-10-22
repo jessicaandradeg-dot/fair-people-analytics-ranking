@@ -71,6 +71,16 @@ def audit_by_group(
             }
         )
 
+    highest_rate = max(row["selection_rate_at_k"] for row in rows)
+    for row in rows:
+        rate = float(row["selection_rate_at_k"])
+        row["selection_ratio_vs_highest"] = (
+            rate / highest_rate if highest_rate > 0 else None
+        )
+        row["meets_four_fifths_rule"] = (
+            rate / highest_rate >= 0.8 if highest_rate > 0 else None
+        )
+
     return pd.DataFrame(rows)
 
 

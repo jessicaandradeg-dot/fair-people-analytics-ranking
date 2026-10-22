@@ -2,20 +2,22 @@
 
 **A compact, reproducible portfolio prototype for ranking, fairness, explainability, drift, governance, and pilot-design methods. It is not a hiring product.**
 
-This project compares two simple logistic ranking models over synthetic candidate-like records:
+This project compares historical-decision and job-signal logistic models with a LightGBM LambdaRank model trained and evaluated by synthetic vacancy groups:
 
 1. A model trained to reproduce simulated historical decisions, which deliberately include group and proxy effects.
-2. A job-signal reference trained on synthetic skills and work-sample features.
+2. A job-signal logistic reference trained on synthetic skills and work-sample features.
+3. A LightGBM LambdaRank model trained with each vacancy as a query group.
 
-The project also demonstrates a group-aware top-k post-processing method, linear-model explanations, population stability index (PSI) drift checks, and an offline randomized pilot simulation measuring selection quality and review effort.
+The project also demonstrates a group-aware top-k post-processing method, linear and SHAP explanations, the four-fifths selection-rate heuristic, pseudonymization and k-anonymity diagnostics, population stability index (PSI) drift checks, and an offline randomized pilot simulation measuring selection quality and review effort.
 
 ## What this project demonstrates
 
-- **Ranking ML:** a held-out train/test workflow, top-k ranking, Precision@k, Recall@k, and NDCG@k.
+- **Ranking ML:** a vacancy-group holdout, logistic regression versus LightGBM LambdaRank, and macro-averaged per-vacancy Precision@k, Recall@k, and NDCG@k.
 - **Data preparation and EDA:** a validated one-to-one join of two synthetic profile/assessment tables by candidate ID, feature construction, missingness/distribution summaries, label rates, and group-level summaries.
-- **Fairness audit:** selection rate and qualified-record recall by synthetic gender, age, and arbitrary synthetic group categories; group counts and small-group warnings are retained in reports.
+- **Fairness audit:** selection rate, qualified-record recall, and the selection-rate ratio versus the highest-rate group by synthetic gender, age, and arbitrary synthetic group categories; the four-fifths heuristic is explicitly not a legal test.
 - **Bias mitigation exercise:** post-process one ranking to allocate top-k slots approximately proportional to group population. This demonstrates a demographic-parity-style intervention and reports quality/workload trade-offs; it is not presented as a universally fair or legally appropriate method.
-- **Explainability:** standardized logistic-regression coefficients and per-record linear contributions to log-odds. These explanations are model mechanics, not causal explanations or SHAP values.
+- **Explainability:** standardized logistic-regression coefficients and per-record linear contributions to log-odds, alongside SHAP values for the tree ranker. These are model-score explanations, not causal explanations.
+- **Privacy demonstration:** keyed HMAC-SHA256 pseudonyms and an equivalence-class k-anonymity diagnostic. Neither is anonymization or an LGPD compliance claim.
 - **Drift monitoring basics:** PSI on numeric and categorical feature distributions, with low/investigate/high triage labels. A deliberately shifted synthetic scenario tests whether the monitor can surface change.
 - **Controlled evaluation design:** randomized synthetic control/treatment arms compare an unmitigated top-k baseline with gender-group demographic-parity post-processing; quality and simulated review time include bootstrap 95% intervals for differences.
 - **MVP/reproducibility:** a runnable command-line workflow, fixed seeds, JSON/CSV outputs, and automated tests.
@@ -33,21 +35,31 @@ The project also demonstrates a group-aware top-k post-processing method, linear
 - The randomized A/B pilot is simulated offline. It is **not** an online pilot, real recruiter study, user research, or causal evidence about a deployed system.
 - The prototype has no applicant UI, persistent candidate database, real-data ingestion, web API, deployment, or automated decision workflow.
 
+The section on **auditoria de rótulos e viés histórico** describes synthetic labels only; it is not an audit of real hiring decisions.
+
 ## Metrics and methods
 
 ### Ranking quality
 
 `precision_at_k`, `recall_at_k`, and `NDCG@k` compare model ordering to the synthetic `qualified` label on a held-out set. This label is generated from invented skills/work-sample scores and is not a real definition of candidate suitability.
 
+Vacancy IDs are held out between training and test. The logistic reference and LambdaRank metrics are macro-averaged within each test vacancy, with a top-k fraction applied independently to each vacancy.
+
 ### Fairness and post-processing
 
 The audit reports selection rate and qualified-record recall by group for each ranking. Groups with fewer than 30 test records get a visible warning and are not silently removed.
+
+It also reports each group's selection rate divided by the highest group rate, marking ratios below 0.8 for review. This four-fifths heuristic is descriptive only and is not a legal conclusion, proof of fairness, or substitute for context-specific analysis.
 
 The mitigation exercise allocates the selected top-k slots approximately in proportion to group counts, then chooses the highest scoring records within each group. It evaluates one synthetic gender attribute and compares selection metrics against the unmitigated model. The exact allocation, fairness definition, and chosen group attributes materially affect both selection and quality; do not treat demographic parity as a sufficient fairness objective.
 
 ### Explainability
 
-The global report contains standardized logistic coefficients. For the ten highest-ranked synthetic records under each model, the local report gives the largest feature contributions to log-odds. Contributions plus the fitted intercept reconstruct that linear model's log-odds; they do not explain causation, validate the target, or establish that a feature is appropriate to use.
+The global report contains standardized logistic coefficients. For the ten highest-ranked synthetic records under each logistic model, the local report gives the largest feature contributions to log-odds. The LambdaRank model reports SHAP contributions for a small ranked sample and a global mean-absolute-SHAP summary. None of these values explain causation, validate the target, or establish that a feature is appropriate to use.
+
+### Pseudonymization and k-anonymity
+
+Exported candidate IDs are replaced by HMAC-SHA256 pseudonyms. Set `PEOPLE_ANALYTICS_PSEUDONYM_KEY` to a secret of at least 16 bytes for stable pseudonyms across runs; otherwise a random per-run key is generated and discarded. Never commit or publish that key. A separate k-anonymity diagnostic counts synthetic equivalence classes smaller than five; it does not suppress records and provides no privacy guarantee.
 
 ### Drift
 
@@ -62,6 +74,8 @@ The code randomly assigns synthetic records to a baseline ranking arm or a group
 ```text
 .
 |-- GOVERNANCE.md
+|-- MODEL_CARD.md
+|-- CHANGELOG.md
 |-- pyproject.toml
 |-- src/
 |   `-- people_analytics/
@@ -72,6 +86,7 @@ The code randomly assigns synthetic records to a baseline ranking arm or a group
 |       |-- experiment.py
 |       |-- metrics.py
 |       |-- mitigation.py
+|       |-- privacy.py
 |       |-- pilot.py
 |       `-- __main__.py
 `-- tests/
@@ -96,10 +111,8 @@ Run a larger reproducible example:
 python -m people_analytics --n 5000 --seed 17 --selection-fraction 0.2
 ```
 
-The command writes local files under `reports/`, including the experiment summary, EDA summary, group audits before and after post-processing, coefficient/local explanations, train-vs-test and stress-test feature drift reports, and synthetic pilot results/assignments. Generated reports are ignored by Git; review them locally before deciding whether any sanitized summary should be published.
+The command writes local files under `reports/`, including the experiment summary, EDA summary, group audits and four-fifths ratios, linear and SHAP explanations, k-anonymity class counts, train-vs-test and stress-test drift reports, and synthetic pilot results/assignments. Exported candidate IDs are pseudonymized. Generated reports are ignored by Git; review outputs before publishing any summary.
 
 ## Example run
 
-For `--n 1000 --seed 42`, the test set has 300 synthetic records and top-k contains 60. The original ranking models had NDCG@60 values of approximately `0.873` and `0.923`. In the generated synthetic drift stress test, `education_access` and `experience_years` are deliberately shifted and reported as high-PSI. In the randomized offline pilot simulation, precision was `0.867` for the control and `0.767` for the treatment; the treatment-minus-control difference was `-0.10`, with a bootstrap 95% interval from `-0.30` to `0.10`. This illustrates why measuring a trade-off and uncertainty is preferable to claiming mitigation automatically improved quality. Exact results can be regenerated with the command above.
-
-These numbers describe only this deterministic simulation. They are not real-world evidence or claims about any group.
+Results depend on the fixed synthetic generator and model versions; run the command to obtain current metrics. No performance or fairness claim is made about real people or employment outcomes. See [MODEL_CARD.md](./MODEL_CARD.md) and [GOVERNANCE.md](./GOVERNANCE.md) for scope and rollback considerations.

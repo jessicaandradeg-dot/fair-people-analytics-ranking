@@ -21,6 +21,7 @@ For every model or policy version, record:
 - fairness definition and why it is appropriate for the specific context;
 - model/policy version, change date, reviewer, approval, and rollback instructions;
 - documented human review, explanation, appeal, and incident-handling process.
+- documented rollback trigger, decision owner, restoration method, and post-rollback review.
 
 The current CLI reports its random seed, synthetic dataset size, model metrics, group audits, policy examples, and drift triage. It does not implement approvals, access control, an audit log service, case management, notices, or appeals.
 
@@ -41,7 +42,11 @@ This repository's group labels and outcomes are invented. The synthetic race-lik
 - Monitor target quality, calibration, performance, fairness, and operational incidents separately when valid labels become available.
 - Document alert ownership, escalation, rollback, revalidation, and communication to affected stakeholders.
 
-The repository contains offline distribution comparisons only. It has no live monitoring, alerting, production data, service-level objectives, or rollback mechanism.
+The repository contains offline distribution comparisons only. It has no live monitoring, alerting, production data, service-level objectives, or automated rollback mechanism.
+
+### Rollback plan (design checklist only)
+
+Before any authorized real-world pilot, name a responsible owner and define measurable stop conditions for data quality, model quality, group-impact review, privacy/security incidents, and operational failure. On a stop condition, disable the model output, restore the previously approved non-model process, preserve only authorized audit evidence, notify the designated stakeholders, investigate root cause, and require documented re-validation and approval before any re-entry. This repository implements none of those controls; the steps are a planning template, not an operational rollback capability.
 
 ## 5. Controlled evaluation
 

@@ -11,6 +11,7 @@ MODEL_FEATURES = [
 ]
 JOB_SIGNAL_FEATURES = ["skills_score", "work_sample_score"]
 AUDIT_ATTRIBUTES = ["gender_group", "race_group_synthetic", "age_group"]
+JOB_GROUP_COLUMN = "job_id"
 
 
 def make_synthetic_candidates(
@@ -53,6 +54,8 @@ def make_synthetic_candidates(
     group_b = race_group_synthetic == "synthetic_group_b"
     group_c = race_group_synthetic == "synthetic_group_c"
     older = age_group == "40_and_over"
+    job_number = rng.integers(0, 12, size=n)
+    job_ids = np.array([f"VAC-{number:02d}" for number in job_number])
     education_access = np.clip(
         rng.normal(
             0.72 - 0.12 * women - 0.08 * nonbinary - 0.06 * older,
@@ -71,7 +74,11 @@ def make_synthetic_candidates(
         30.0,
     )
 
-    job_signal = 0.65 * skills_score + 0.35 * work_sample_score
+    job_skill_weight = np.linspace(0.35, 0.75, 12)[job_number]
+    job_signal = (
+        job_skill_weight * skills_score
+        + (1.0 - job_skill_weight) * work_sample_score
+    )
     qualification_probability = 1.0 / (
         1.0 + np.exp(-9.0 * (job_signal - 0.60))
     )
@@ -99,6 +106,7 @@ def make_synthetic_candidates(
     return pd.DataFrame(
         {
             "candidate_id": [f"SYN-{index:05d}" for index in range(n)],
+            JOB_GROUP_COLUMN: job_ids,
             "skills_score": skills_score,
             "work_sample_score": work_sample_score,
             "education_access": education_access,
@@ -119,6 +127,7 @@ def prepare_and_integrate_synthetic_sources(
     """Validate and join two synthetic tables using a one-to-one candidate key."""
     required = {
         "candidate_id",
+        JOB_GROUP_COLUMN,
         "skills_score",
         "education_access",
         "experience_years",
@@ -140,6 +149,7 @@ def prepare_and_integrate_synthetic_sources(
 
     profile_columns = [
         "candidate_id",
+        JOB_GROUP_COLUMN,
         "skills_score",
         "education_access",
         "experience_years",

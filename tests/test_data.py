@@ -12,6 +12,7 @@ def test_synthetic_data_is_reproducible_and_only_contains_fake_ids():
     pd.testing.assert_frame_equal(first, second)
     assert first["candidate_id"].str.startswith("SYN-").all()
     assert len(first) == 150
+    assert first["job_id"].nunique() > 1
     assert first["review_minutes"].between(3, 15).all()
     assert set(first["race_group_synthetic"]).issubset(
         {"synthetic_group_a", "synthetic_group_b", "synthetic_group_c"}

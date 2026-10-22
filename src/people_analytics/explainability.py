@@ -69,3 +69,50 @@ def local_linear_explanations(
             }
         )
     return pd.DataFrame(output)
+
+
+def shap_ranker_explanations(
+    model: object,
+    records: pd.DataFrame,
+    feature_names: list[str],
+) -> pd.DataFrame:
+    """Return SHAP contributions for a small sample from a fitted tree ranker."""
+    import shap
+
+    if not feature_names:
+        raise ValueError("feature_names must not be empty.")
+    missing = set(feature_names + ["candidate_id"]) - set(records.columns)
+    if missing:
+        raise ValueError(f"Records are missing fields: {sorted(missing)}")
+    booster = getattr(model, "booster_", None)
+    if booster is None:
+        raise ValueError("model must expose a fitted LightGBM booster_.")
+
+    sample = records[feature_names]
+    explainer = shap.TreeExplainer(booster)
+    values = explainer.shap_values(sample)
+    if isinstance(values, list):
+        values = values[-1]
+    contributions = np.asarray(values, dtype=float)
+    if contributions.ndim == 3:
+        contributions = contributions[:, :, -1]
+    if contributions.shape != sample.shape:
+        raise ValueError("SHAP output shape does not match the sampled feature matrix.")
+    base_value = float(np.asarray(explainer.expected_value).reshape(-1)[-1])
+
+    rows = []
+    for row_position, candidate_id in enumerate(
+        records["candidate_id"].to_numpy()
+    ):
+        for feature_position, feature in enumerate(feature_names):
+            value = float(contributions[row_position, feature_position])
+            rows.append(
+                {
+                    "candidate_id": candidate_id,
+                    "feature": feature,
+                    "shap_value": value,
+                    "absolute_shap_value": abs(value),
+                    "base_value": base_value,
+                }
+            )
+    return pd.DataFrame(rows)
